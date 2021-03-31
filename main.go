@@ -3,12 +3,12 @@ package main
 //this is bell messenger API
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"os"
+	"sync"
 )
 
 const (
@@ -17,38 +17,33 @@ const (
 	connType = "tcp"
 )
 
-func HandleJson(c net.Conn) {
+type Message struct {
+	Email    string `json:"email"`
+	Username string `json:"username"`
+	Message  string `json:"message"`
+}
+
+//HandleJson reads(decode) json data
+func HandleJson(c net.Conn, wg *sync.WaitGroup) {
 	d := json.NewDecoder(c)
 
-	var msg string
+	var msg Message
 
 	err := d.Decode(&msg)
 
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	fmt.Println(msg)
+	wg.Done()
 	c.Close()
 
 }
 
-func handleConnection(conn net.Conn) {
-	buffer, err := bufio.NewReader(conn).ReadBytes('\n')
-
-	if err != nil {
-		fmt.Println("Client left.")
-		conn.Close()
-		return
-	}
-
-	log.Println("Client message:", string(buffer[:len(buffer)-1]))
-
-	conn.Write(buffer)
-
-	handleConnection(conn)
-}
-
 func main() {
+	var wg sync.WaitGroup
+
 	fmt.Println("Starting " + connType + " server on " + connHost + ":" + connPort + ".....")
 	l, err := net.Listen(connType, connHost+":"+connPort)
 	if err != nil {
@@ -67,7 +62,9 @@ func main() {
 
 		fmt.Println("Client " + c.RemoteAddr().String() + " connected.")
 
-		go handleConnection(c)
-	}
+		wg.Add(1)
+		go HandleJson(c, &wg)
+		wg.Wait()
 
+	}
 }
